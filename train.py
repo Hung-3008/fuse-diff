@@ -107,8 +107,11 @@ class BraTSTrainer(Trainer):
 
         x_start = (x_start) * 2 - 1
         x_t, t, noise = self.model(x=x_start, pred_type="q_sample")
-        pred_xstart = self.model(x=x_t, step=t, image=image,
+        pred_xstart, u1 = self.model(x=x_t, step=t, image=image,
                                  pred_type="denoise")
+
+        print(f'========= u1: {u1} =========')
+        print(f'========= pred_xstart: {pred_xstart} =========')
 
         loss_dice = self.dice_loss(pred_xstart, label)
         loss_bce = self.bce(pred_xstart, label)
@@ -183,14 +186,14 @@ class BraTSTrainer(Trainer):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a model on BraTS dataset.")
-    parser.add_argument("--data_dir", type=str, default="./datasets/brats2020/MICCAI_BraTS2020_TrainingData/")
-    parser.add_argument("--logdir", type=str, default="./logs_brats/diffusion_seg_all_loss_embed/")
+    parser.add_argument("--data_dir", type=str, default="./data/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData")
+    parser.add_argument("--logdir", type=str, default="./logs")
     parser.add_argument("--max_epoch", type=int, default=300)
-    parser.add_argument("--batch_size", type=int, default=2)
+    parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--val_every", type=int, default=10)
-    parser.add_argument("--num_gpus", type=int, default=4)
+    parser.add_argument("--num_gpus", type=int, default=1)
     parser.add_argument("--device", type=str, default="cuda:0")
-    parser.add_argument("--env", type=str, default="DDP")
+    parser.add_argument("--env", type=str, default="pytorch")
 
     args = parser.parse_args()
 
