@@ -17,6 +17,7 @@ import torch.nn as nn
 from monai.networks.blocks import Convolution, UpSample
 from monai.networks.layers.factories import Conv, Pool
 from monai.utils import deprecated_arg, ensure_tuple_rep
+import torch.nn.functional as F
 
 __all__ = ["BasicUnet", "Basicunet", "basicunet", "BasicUNet"]
 
@@ -339,6 +340,9 @@ class BasicUNetDe(nn.Module):
         x0 = self.conv_0(x, temb)
         if embeddings is not None:
             x0 += embeddings[0]
+
+        if x1.shape != embeddings[1].shape:
+            embeddings[1] = F.interpolate(embeddings[1], size=x1.shape[2:], mode='trilinear', align_corners=False)
 
         x1 = self.down_1(x0, temb)
         if embeddings is not None:
