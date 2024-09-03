@@ -341,10 +341,10 @@ class BasicUNetDe(nn.Module):
         if embeddings is not None:
             x0 += embeddings[0]
 
+        x1 = self.down_1(x0, temb)
+
         if x1.shape != embeddings[1].shape:
             embeddings[1] = F.interpolate(embeddings[1], size=x1.shape[2:], mode='trilinear', align_corners=False)
-
-        x1 = self.down_1(x0, temb)
         if embeddings is not None:
             x1 += embeddings[1]
 
