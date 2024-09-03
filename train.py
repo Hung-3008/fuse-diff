@@ -20,7 +20,8 @@ from monai.losses.dice import DiceLoss
 from monai.utils import set_determinism
 from unet.basic_unet import BasicUNetEncoder
 from unet.basic_unet_denose import BasicUNetDe
-
+from monai.networks.nets import SegResNet
+from monai.networks.layers.factories import Conv
 set_determinism(123)
 
 
@@ -54,6 +55,7 @@ class DiffUNet(nn.Module):
             loss_type=LossType.MSE,
         )
         self.sampler = UniformSampler(1000)
+        
 
     def forward(self, image=None, x=None, pred_type=None, step=None):
         if pred_type == "q_sample":
@@ -63,6 +65,8 @@ class DiffUNet(nn.Module):
 
         elif pred_type == "denoise":
             embeddings = self.embed_model(image)
+            # segresnet_features = self.segresnet(image)
+            # combined_features = torch.cat((embeddings, segresnet_features), dim=1)
             return self.model(x, t=step, image=image, embeddings=embeddings)
 
         elif pred_type == "ddim_sample":
@@ -86,11 +90,20 @@ class BraTSTrainer(Trainer):
         self.window_infer = SlidingWindowInferer(
             roi_size=[96, 96, 96], sw_batch_size=1, overlap=0.25
         )
-        self.model = DiffUNet()
+        self.model = DiffUNet().to(device)
+
+        self.segresnet = SegResNet(
+                        blocks_down=[1, 2, 2, 4],
+                        blocks_up=[1, 1, 1],
+                        init_filters=16,
+                        in_channels=4,  # Input channels set to 4
+                        out_channels=64,  # Output channels set to 64
+                        dropout_prob=0.2,
+                    ).to(device)
 
         self.best_mean_dice = 0.0
         self.optimizer = torch.optim.AdamW(
-            self.model.parameters(), lr=1e-4, weight_decay=1e-3
+            list(self.model.parameters()) + list(self.segresnet.parameters()), lr=1e-4, weight_decay=1e-3
         )
         self.ce = nn.CrossEntropyLoss()
         self.mse = nn.MSELoss()
@@ -101,17 +114,24 @@ class BraTSTrainer(Trainer):
         self.bce = nn.BCEWithLogitsLoss()
         self.dice_loss = DiceLoss(sigmoid=True)
 
+        
+        self.final_conv = Conv["conv", 3](64, 3, kernel_size=1).to(device)
+        
+
     def training_step(self, batch):
         image, label = self.get_input(batch)
+        image = image.to(self.device)
+        label = label.to(self.device)
         x_start = label
 
         x_start = (x_start) * 2 - 1
         x_t, t, noise = self.model(x=x_start, pred_type="q_sample")
         pred_xstart, u1 = self.model(x=x_t, step=t, image=image,
                                  pred_type="denoise")
-
-        print(f'========= u1: {u1} =========')
-        print(f'========= pred_xstart: {pred_xstart} =========')
+        
+        segnet_features = self.segresnet(image)
+        pred_xstart = u1 + segnet_features
+        pred_xstart = self.final_conv(pred_xstart)
 
         loss_dice = self.dice_loss(pred_xstart, label)
         loss_bce = self.bce(pred_xstart, label)
@@ -134,6 +154,8 @@ class BraTSTrainer(Trainer):
 
     def validation_step(self, batch):
         image, label = self.get_input(batch)
+        image = image.to(self.device)
+        label = label.to(self.device)
 
         output = self.window_infer(image, self.model, pred_type="ddim_sample")
 
