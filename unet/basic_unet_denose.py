@@ -366,6 +366,7 @@ class BasicUNetDe(nn.Module):
         u1 = self.upcat_1(u2, x0, temb)
 
         logits = self.final_conv(u1)
+        
         return logits, u1
 
 

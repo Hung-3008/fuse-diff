@@ -126,12 +126,13 @@ class BraTSTrainer(Trainer):
 
         x_start = (x_start) * 2 - 1
         x_t, t, noise = self.model(x=x_start, pred_type="q_sample")
-        pred_xstart, u1 = self.model(x=x_t, step=t, image=image,
+        pred_tmp, u1 = self.model(x=x_t, step=t, image=image,
                                  pred_type="denoise")
         
         segnet_features = self.segresnet(image)
-        pred_xstart = u1 + segnet_features
+        pred_xstart = (u1 + segnet_features) / 2
         pred_xstart = self.final_conv(pred_xstart)
+
 
         loss_dice = self.dice_loss(pred_xstart, label)
         loss_bce = self.bce(pred_xstart, label)
