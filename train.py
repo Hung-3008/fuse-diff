@@ -23,7 +23,7 @@ from unet.basic_unet_denose import BasicUNetDe
 from monai.networks.nets import SegResNet
 from monai.networks.layers.factories import Conv
 set_determinism(123)
-
+import torch.nn.functional as F
 
 class DiffUNet(nn.Module):
     def __init__(self) -> None:
@@ -129,6 +129,8 @@ class BraTSTrainer(Trainer):
         pred_xstart_diffunet, _ = self.model(x=x_t, step=t, image=image, pred_type="denoise")
         
         # Get output from SegResNet
+        # print('size fron training: ',image.shape)
+        
         pred_xstart_seg_resnet = self.seg_resnet(image)
         
         # Fuse outputs
@@ -155,10 +157,17 @@ class BraTSTrainer(Trainer):
 
     def validation_step(self, batch):
         image, label = self.get_input(batch)
+        print('input image: ',image.shape)
 
         # Get outputs from DiffUNet and SegResNet
         output_diffunet = self.window_infer(image, self.model, pred_type="ddim_sample")
-        output_seg_resnet = self.seg_resnet(image)
+        print('output from diffusion: ',image.shape)
+        
+        input_image = image
+        transformed_image = F.interpolate(input_image, size=(96, 96, 96), mode='trilinear', align_corners=False)
+        output_seg_resnet = self.seg_resnet(transformed_image)
+        print('output from segresnet: ',output_seg_resnet.shape)
+
         
         # Fuse outputs
         fused_output = self.fusion_layer(torch.cat((output_diffunet, output_seg_resnet), dim=1))

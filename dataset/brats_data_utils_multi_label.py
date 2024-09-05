@@ -163,9 +163,9 @@ def get_loader_brats(data_dir, batch_size=1, fold=0, num_workers=8):
             transforms.ConvertToMultiChannelBasedOnBratsClassesD(keys=["label"]),
             transforms.CropForegroundd(keys=["image", "label"], source_key="image"),
 
-            transforms.RandSpatialCropd(keys=["image", "label"], roi_size=[96, 96, 96],
+            transforms.RandSpatialCropd(keys=["image", "label"], roi_size=[128, 128, 128],
                                         random_size=False),
-            transforms.SpatialPadd(keys=["image", "label"], spatial_size=(96, 96, 96)),
+            transforms.SpatialPadd(keys=["image", "label"], spatial_size=(128, 128, 128)),
             transforms.RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
             transforms.RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=1),
             transforms.RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=2),
