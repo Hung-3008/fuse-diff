@@ -91,19 +91,24 @@ class BraTSTrainer(Trainer):
             roi_size=[96, 96, 96], sw_batch_size=1, overlap=0.25
         )
         self.model = DiffUNet().to(device)
-
-        self.segresnet = SegResNet(
-                        blocks_down=[1, 2, 2, 4],
-                        blocks_up=[1, 1, 1],
-                        init_filters=16,
-                        in_channels=4,  # Input channels set to 4
-                        out_channels=64,  # Output channels set to 64
-                        dropout_prob=0.2,
-                    ).to(device)
+        self.device = device
+        # Initialize SegResNet
+        self.seg_resnet = SegResNet(
+            spatial_dims=3, 
+            in_channels=number_modality, 
+            out_channels=number_targets, 
+            init_filters=16, 
+            dropout_prob=0.2
+        ).to(device)
+        
+        # Fusion layer to combine outputs from DiffUNet and SegResNet
+        self.fusion_layer = nn.Conv3d(number_targets * 2, number_targets, kernel_size=1).to(device)
 
         self.best_mean_dice = 0.0
         self.optimizer = torch.optim.AdamW(
-            list(self.model.parameters()) + list(self.segresnet.parameters()), lr=1e-4, weight_decay=1e-3
+            list(self.model.parameters()) + list(self.seg_resnet.parameters()) + list(self.fusion_layer.parameters()), 
+            lr=1e-4, 
+            weight_decay=1e-3
         )
         self.ce = nn.CrossEntropyLoss()
         self.mse = nn.MSELoss()
@@ -113,35 +118,27 @@ class BraTSTrainer(Trainer):
 
         self.bce = nn.BCEWithLogitsLoss()
         self.dice_loss = DiceLoss(sigmoid=True)
-
-        
-        self.final_conv = Conv["conv", 3](64, 3, kernel_size=1).to(device)
         
 
     def training_step(self, batch):
         image, label = self.get_input(batch)
-        image = image.to(self.device)
-        label = label.to(self.device)
         x_start = label
 
         x_start = (x_start) * 2 - 1
         x_t, t, noise = self.model(x=x_start, pred_type="q_sample")
-        pred_tmp, u1 = self.model(x=x_t, step=t, image=image,
-                                 pred_type="denoise")
-        segnet_features = self.segresnet(image)
-
-        # normalize u1 and segnet_features
-        # u1_normalized = nn.functional.normalize(u1, p=2, dim=1)
-        # segnet_features_normalized = nn.functional.normalize(segnet_features, p=2, dim=1)
-
-        #pred_xstart = (u1_normalized + segnet_features_normalized) / 2
-        pred_xstart = self.final_conv(u1)
+        pred_xstart_diffunet, _ = self.model(x=x_t, step=t, image=image, pred_type="denoise")
         
-        loss_dice = self.dice_loss(pred_xstart, label)
-        loss_bce = self.bce(pred_xstart, label)
+        # Get output from SegResNet
+        pred_xstart_seg_resnet = self.seg_resnet(image)
+        
+        # Fuse outputs
+        fused_output = self.fusion_layer(torch.cat((pred_xstart_diffunet, pred_xstart_seg_resnet), dim=1))
+        
+        loss_dice = self.dice_loss(fused_output, label)
+        loss_bce = self.bce(fused_output, label)
 
-        pred_xstart = torch.sigmoid(pred_xstart)
-        loss_mse = self.mse(pred_xstart, label)
+        fused_output = torch.sigmoid(fused_output)
+        loss_mse = self.mse(fused_output, label)
 
         loss = loss_dice + loss_bce + loss_mse
 
@@ -149,39 +146,43 @@ class BraTSTrainer(Trainer):
 
         return loss
 
-    def get_input(self, batch):
-        image = batch["image"]
-        label = batch["label"]
 
+    def get_input(self, batch):
+        image = batch["image"].to(self.device)
+        label = batch["label"].to(self.device)
         label = label.float()
         return image, label
 
     def validation_step(self, batch):
         image, label = self.get_input(batch)
-        image = image.to(self.device)
-        label = label.to(self.device)
 
-        output = self.window_infer(image, self.model, pred_type="ddim_sample")
-
-        output = torch.sigmoid(output)
+        # Get outputs from DiffUNet and SegResNet
+        output_diffunet = self.window_infer(image, self.model, pred_type="ddim_sample")
+        output_seg_resnet = self.seg_resnet(image)
         
-        output = (output > 0.5).float().cpu().numpy()
+        # Fuse outputs
+        fused_output = self.fusion_layer(torch.cat((output_diffunet, output_seg_resnet), dim=1))
+        
+        fused_output = torch.sigmoid(fused_output)
+        fused_output = (fused_output > 0.5).float().cpu().numpy()
 
         target = label.cpu().numpy()
-        # ce
-        o = output[:, 1]
-        t = target[:, 1]  
+
+        # Calculate metrics
+        o = fused_output[:, 1]
+        t = target[:, 1]
         wt = dice(o, t)
-        # core
-        o = output[:, 0]
+        
+        o = fused_output[:, 0]
         t = target[:, 0]
         tc = dice(o, t)
-        # active
-        o = output[:, 2]
+        
+        o = fused_output[:, 2]
         t = target[:, 2]
         et = dice(o, t)
 
         return [wt, tc, et]
+
 
     def validation_end(self, mean_val_outputs):
         wt, tc, et = mean_val_outputs
