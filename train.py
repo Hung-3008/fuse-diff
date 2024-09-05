@@ -131,12 +131,11 @@ class BraTSTrainer(Trainer):
         segnet_features = self.segresnet(image)
 
         # normalize u1 and segnet_features
+        # u1_normalized = nn.functional.normalize(u1, p=2, dim=1)
+        # segnet_features_normalized = nn.functional.normalize(segnet_features, p=2, dim=1)
 
-        u1_normalized = nn.functional.normalize(u1, p=2, dim=1)
-        segnet_features_normalized = nn.functional.normalize(segnet_features, p=2, dim=1)
-
-        pred_xstart = (u1_normalized + segnet_features_normalized) / 2
-        pred_xstart = self.final_conv(pred_xstart)
+        #pred_xstart = (u1_normalized + segnet_features_normalized) / 2
+        pred_xstart = self.final_conv(u1)
         
         loss_dice = self.dice_loss(pred_xstart, label)
         loss_bce = self.bce(pred_xstart, label)
