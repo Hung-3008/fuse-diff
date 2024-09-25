@@ -173,9 +173,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     if args.env == "DDP":
-        torch.cuda.set_device(args.local_rank)
+        local_rank = int(os.environ["LOCAL_RANK"])
+        torch.cuda.set_device(local_rank)
         torch.distributed.init_process_group(backend="nccl", init_method="env://")
-
     args = parser.parse_args()
 
     model_save_path = os.path.join(args.logdir, "model")
