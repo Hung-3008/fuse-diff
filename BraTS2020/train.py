@@ -56,7 +56,8 @@ class DiffUNet(nn.Module):
 
         elif pred_type == "denoise":
             embeddings = self.embed_model(image)
-            return self.model(x, t=step, image=image, embeddings=embeddings)
+            logits, aux_output = self.model(x, t=step, embeddings=embeddings)
+            return logits, aux_output
 
         elif pred_type == "ddim_sample":
             embeddings = self.embed_model(image)
@@ -90,19 +91,30 @@ class BraTSTrainer(Trainer):
 
         x_start = (x_start) * 2 - 1
         x_t, t, noise = self.model(x=x_start, pred_type="q_sample")
-        pred_xstart = self.model(x=x_t, step=t, image=image, pred_type="denoise")
+        pred_xstart, aux_output = self.model(x=x_t, step=t, image=image, pred_type="denoise")
 
+        # Main loss
         loss_dice = self.dice_loss(pred_xstart, label)
         loss_bce = self.bce(pred_xstart, label)
-
         pred_xstart = torch.sigmoid(pred_xstart)
         loss_mse = self.mse(pred_xstart, label)
 
-        loss = loss_dice + loss_bce + loss_mse
+        main_loss = loss_dice + loss_bce + loss_mse
 
-        self.log("train_loss", loss, step=self.global_step)
+        # Aux loss
+        aux_loss_dice = self.dice_loss(aux_output, label)
+        aux_loss_bce = self.bce(aux_output, label)
+        aux_output_sigmoid = torch.sigmoid(aux_output)
+        aux_loss_mse = self.mse(aux_output_sigmoid, label)
 
-        return loss 
+        aux_loss = aux_loss_dice + aux_loss_bce + aux_loss_mse
+        total_loss = main_loss + 0.27 * aux_loss
+
+        self.log("train_loss", total_loss, step=self.global_step)
+        self.log("main_loss", main_loss, step=self.global_step)
+        self.log("aux_loss", aux_loss, step=self.global_step)
+
+        return total_loss 
  
     def get_input(self, batch):
         image = batch["image"]
