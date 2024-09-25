@@ -265,7 +265,8 @@ class BasicUNetDe(nn.Module):
 
         # Kết quả cuối cùng
         logits = self.final_conv(u1)
+        print(f"Logits shape: {logits.shape}.")
         #logits = u1
-
+                
 
         return logits, aux_output
