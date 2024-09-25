@@ -265,8 +265,16 @@ class BasicUNetDe(nn.Module):
 
         # Kết quả cuối cùng
         logits = self.final_conv(u1)
+
         print(f"Logits shape: {logits.shape}.")
+        print(f"Aux_output shape: {aux_output.shape}.") 
+
+        logits = F.interpolate(logits, size=(96, 96, 96), mode='trilinear', align_corners=False)
+        aux_output = F.interpolate(aux_output, size=(96, 96, 96), mode='trilinear', align_corners=False)
+
+        print(f"Logits shape after resize: {logits.shape}.")
+        print(f"Aux_output shape after resize: {aux_output.shape}.")
         #logits = u1
-                
+        
 
         return logits, aux_output
