@@ -169,6 +169,12 @@ if __name__ == "__main__":
     parser.add_argument("--num_gpus", type=int, default=1, help="Number of GPUs to use")
     parser.add_argument("--device", type=str, default="cuda:0", help="Device to use for training")
     parser.add_argument("--env", type=str, default="pytorch", help="Environment type")
+    parser.add_argument("--local_rank", type=int, default=0, help="Local rank for distributed training")
+
+    args = parser.parse_args()
+    if args.env == "DDP":
+        torch.cuda.set_device(args.local_rank)
+        torch.distributed.init_process_group(backend="nccl", init_method="env://")
 
     args = parser.parse_args()
 
