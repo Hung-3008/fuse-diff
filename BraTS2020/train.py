@@ -167,7 +167,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size")
     parser.add_argument("--val_every", type=int, default=10, help="Validation frequency (in epochs)")
     parser.add_argument("--num_gpus", type=int, default=1, help="Number of GPUs to use")
-    parser.add_argument("--device", type=str, default="cuda:0", help="Device to use for training")
+    #parser.add_argument("--device", type=str, default="cuda:0", help="Device to use for training")
     parser.add_argument("--env", type=str, default="pytorch", help="Environment type")
     parser.add_argument("--local_rank", type=int, default=0, help="Local rank for distributed training")
 
@@ -175,9 +175,9 @@ if __name__ == "__main__":
     if args.env == "DDP":
         local_rank = int(os.environ["LOCAL_RANK"])
         torch.cuda.set_device(local_rank)
-        torch.distributed.init_process_group(backend="nccl", init_method="env://")
-    args = parser.parse_args()
+        args.device = f"cuda:{local_rank}"
 
+    args = parser.parse_args()
     model_save_path = os.path.join(args.logdir, "model")
 
     train_ds, val_ds, test_ds = get_loader_brats(data_dir=args.data_dir, batch_size=args.batch_size, fold=0)
