@@ -1,0 +1,3 @@
+数据读取出现问题，./datasets/brats2020/MICCAI_BraTS2020_TrainingData/survival_info.csv
+数据读取出现问题，./datasets/brats2020/MICCAI_BraTS2020_TrainingData/BraTS20_Training_355
+数据读取出现问题，./datasets/brats2020/MICCAI_BraTS2020_TrainingData/name_mapping.csv

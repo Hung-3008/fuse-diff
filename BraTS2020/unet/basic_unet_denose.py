@@ -309,7 +309,9 @@ class BasicUNetDe(nn.Module):
         self.conv_fusion3 = TwoConv(spatial_dims, fea[3]*2, fea[3], act, norm, bias, dropout)       
         self.conv_fusion4 = TwoConv(spatial_dims, fea[4]*2, fea[4], act, norm, bias, dropout)
 
+        #self.conv_0 = TwoConv(spatial_dims, in_channels, features[0], act, norm, bias, dropout)
         self.conv_0 = TwoConv(spatial_dims, in_channels, features[0], act, norm, bias, dropout)
+
         self.down_1 = Down(spatial_dims, fea[0], fea[1], act, norm, bias, dropout)
         self.down_2 = Down(spatial_dims, fea[1], fea[2], act, norm, bias, dropout)
         self.down_3 = Down(spatial_dims, fea[2], fea[3], act, norm, bias, dropout)
@@ -339,8 +341,8 @@ class BasicUNetDe(nn.Module):
         temb = nonlinearity(temb)
         temb = self.temb.dense[1](temb)
 
-        if image is not None :
-            x = torch.cat([image, x], dim=1)
+        # if image is not None :
+        #     x = torch.cat([image, x], dim=1)
             
         # x0 = self.conv_0(x, temb)
         # if embeddings is not None:

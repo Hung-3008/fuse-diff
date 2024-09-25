@@ -28,7 +28,7 @@ class DiffUNet(nn.Module):
         super().__init__()
         self.embed_model = BasicUNetEncoder(3, number_modality, number_targets, [64, 64, 128, 256, 512, 64])
 
-        self.model = BasicUNetDe(3, number_modality + number_targets, number_targets, [64, 64, 128, 256, 512, 64], 
+        self.model = BasicUNetDe(3, number_targets, number_targets, [64, 64, 128, 256, 512, 64], 
                                 act = ("LeakyReLU", {"negative_slope": 0.1, "inplace": False}))
    
         betas = get_named_beta_schedule("linear", 1000)
