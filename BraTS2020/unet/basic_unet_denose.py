@@ -206,7 +206,7 @@ class BasicUNetDe(nn.Module):
         self.upcat_2 = UpCat(spatial_dims, fea[2], fea[1], fea[1], act, norm, bias, dropout, upsample)
         self.upcat_1 = UpCat(spatial_dims, fea[1], fea[0], fea[5], act, norm, bias, dropout, upsample)
 
-        self.final_conv = Conv["conv", spatial_dims](fea[5], out_channels, kernel_size=1)
+        self.final_conv = Conv["conv", spatial_dims](out_channels, out_channels, kernel_size=1)
 
         # ExFuse modules
         self.semantic_supervision = SemanticSupervision(fea[2], out_channels)
@@ -264,8 +264,8 @@ class BasicUNetDe(nn.Module):
         u1 = self.densely_adjacent_prediction(u1)
 
         # Kết quả cuối cùng
-        #logits = self.final_conv(u1)
-        logits = u1
+        logits = self.final_conv(u1)
+        #logits = u1
 
 
         return logits, aux_output
