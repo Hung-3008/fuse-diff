@@ -13,7 +13,6 @@ from typing import Optional, Sequence, Union
 import math 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from monai.networks.blocks import Convolution, UpSample
 from monai.networks.layers.factories import Conv, Pool
@@ -221,18 +220,7 @@ class UpCat(nn.Module):
             x = self.convs(x_0, temb)
 
         return x
-class SEB3D(nn.Module):
-    def __init__(self, low_level_channels, high_level_channels):
-        super(SEB3D, self).__init__()
-        self.high_to_low_conv = nn.Conv3d(high_level_channels, low_level_channels, kernel_size=1)
-        self.fuse_conv = nn.Conv3d(low_level_channels, low_level_channels, kernel_size=3, padding=1)
 
-    def forward(self, low_level_feat, high_level_feat):
-        high_level_feat = F.interpolate(high_level_feat, size=low_level_feat.shape[2:], mode='trilinear', align_corners=True)
-        high_level_feat = self.high_to_low_conv(high_level_feat)
-        fused_feat = low_level_feat * high_level_feat
-        output = self.fuse_conv(fused_feat)
-        return output
 
 class BasicUNetDe(nn.Module):
     @deprecated_arg(
@@ -305,11 +293,6 @@ class BasicUNetDe(nn.Module):
 
         fea = ensure_tuple_rep(features, 6)
         print(f"BasicUNet features: {fea}.")
-        self.seb_1 = SEB3D(fea[0], fea[1])
-        self.seb_2 = SEB3D(fea[1], fea[2])
-        self.seb_3 = SEB3D(fea[2], fea[3])
-        self.seb_4 = SEB3D(fea[3], fea[4])
-
         
         # timestep embedding
         self.temb = nn.Module()
@@ -320,15 +303,7 @@ class BasicUNetDe(nn.Module):
                             512),
         ])
 
-        self.conv_fusion0 = TwoConv(spatial_dims, fea[0]*2, fea[0], act, norm, bias, dropout)
-        self.conv_fusion1 = TwoConv(spatial_dims, fea[1]*2, fea[1], act, norm, bias, dropout)
-        self.conv_fusion2 = TwoConv(spatial_dims, fea[2]*2, fea[2], act, norm, bias, dropout)
-        self.conv_fusion3 = TwoConv(spatial_dims, fea[3]*2, fea[3], act, norm, bias, dropout)       
-        self.conv_fusion4 = TwoConv(spatial_dims, fea[4]*2, fea[4], act, norm, bias, dropout)
-
-        #self.conv_0 = TwoConv(spatial_dims, in_channels, features[0], act, norm, bias, dropout)
         self.conv_0 = TwoConv(spatial_dims, in_channels, features[0], act, norm, bias, dropout)
-
         self.down_1 = Down(spatial_dims, fea[0], fea[1], act, norm, bias, dropout)
         self.down_2 = Down(spatial_dims, fea[1], fea[2], act, norm, bias, dropout)
         self.down_3 = Down(spatial_dims, fea[2], fea[3], act, norm, bias, dropout)
@@ -351,7 +326,6 @@ class BasicUNetDe(nn.Module):
 
         Returns:
             A torch Tensor of "raw" predictions in shape
-
             ``(Batch, out_channels, dim_0[, dim_1, ..., dim_N])``.
         """
         temb = get_timestep_embedding(t, 128)
@@ -359,34 +333,28 @@ class BasicUNetDe(nn.Module):
         temb = nonlinearity(temb)
         temb = self.temb.dense[1](temb)
 
+        if image is not None :
+            x = torch.cat([image, x], dim=1)
+            
         x0 = self.conv_0(x, temb)
         if embeddings is not None:
-            x0 = torch.cat([x0, embeddings[0]], dim=1)
-            x0 = self.conv_fusion0(x0, temb)
-        
+            x0 += embeddings[0]
+
         x1 = self.down_1(x0, temb)
         if embeddings is not None:
-            x1 = torch.cat([x1, embeddings[1]], dim=1)
-            x1 = self.conv_fusion1(x1, temb)
-        
+            x1 += embeddings[1]
+
         x2 = self.down_2(x1, temb)
         if embeddings is not None:
-            x2 = torch.cat([x2, embeddings[2]], dim=1)
-            x2 = self.conv_fusion2(x2, temb)
-        
+            x2 += embeddings[2]
+
         x3 = self.down_3(x2, temb)
         if embeddings is not None:
-            x3 = torch.cat([x3, embeddings[3]], dim=1)
-            x3 = self.conv_fusion3(x3, temb)
-        
+            x3 += embeddings[3]
+
         x4 = self.down_4(x3, temb)
         if embeddings is not None:
-            x4 = torch.cat([x4, embeddings[4]], dim=1)
-            x4 = self.conv_fusion4(x4, temb)        
-
-        x3 = self.seb_4(x3, x4)
-        x2 = self.seb_3(x2, x3)
-        x1 = self.seb_2(x1, x2)
+            x4 += embeddings[4]
 
         u4 = self.upcat_4(x4, x3, temb)
         u3 = self.upcat_3(u4, x2, temb)
@@ -395,5 +363,6 @@ class BasicUNetDe(nn.Module):
 
         logits = self.final_conv(u1)
         return logits
+
 
 
