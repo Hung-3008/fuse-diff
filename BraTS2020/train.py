@@ -159,33 +159,34 @@ class BraTSTrainer(Trainer):
 
         print(f"wt is {wt}, tc is {tc}, et is {et}, mean_dice is {mean_dice}")
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train a DiffUNet model for BraTS dataset")
-    parser.add_argument("--data_dir", type=str, default="./datasets/brats2020/MICCAI_BraTS2020_TrainingData/", help="Path to the dataset directory")
-    parser.add_argument("--logdir", type=str, default="./logs_brats/diffusion_seg_all_loss_embed/", help="Directory to save logs and models")
-    parser.add_argument("--max_epoch", type=int, default=300, help="Maximum number of epochs")
-    parser.add_argument("--batch_size", type=int, default=1, help="Batch size")
-    parser.add_argument("--val_every", type=int, default=10, help="Validation frequency (in epochs)")
-    parser.add_argument("--num_gpus", type=int, default=1, help="Number of GPUs to use")
-    parser.add_argument("--device", type=str, default="cuda:0", help="Device to use for training")
-    parser.add_argument("--env", type=str, default="pytorch", help="Environment type")
-    parser.add_argument("--local_rank", type=int, default=0, help="Local rank for distributed training")
-    parser.add_argument("--not_call_launch", action='store_true', help="Flag to indicate not to call launch")
+def main():
+    # Fixed values
+    data_dir = "/logs"
+    logdir = "/kaggle/input/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData"
+    max_epoch = 300
+    batch_size = 1
+    val_every = 10
+    num_gpus = 2
+    device = "cuda"
+    env = "ddp"
+    # local_rank = 0
+    # not_call_launch = False
 
-    args = parser.parse_args()
+    model_save_path = os.path.join(logdir, "model")
 
-    model_save_path = os.path.join(args.logdir, "model")
-
-    train_ds, val_ds, test_ds = get_loader_brats(data_dir=args.data_dir, batch_size=args.batch_size, fold=0)
+    train_ds, val_ds, test_ds = get_loader_brats(data_dir=data_dir, batch_size=batch_size, fold=0)
     
-    trainer = BraTSTrainer(env_type=args.env,
-                            max_epochs=args.max_epoch,
-                            batch_size=args.batch_size,
-                            device=args.device,
-                            logdir=args.logdir,
-                            val_every=args.val_every,
-                            num_gpus=args.num_gpus,
-                            master_port=17751,
-                            training_script=__file__)
+    trainer = BraTSTrainer(env_type=env,
+                           max_epochs=max_epoch,
+                           batch_size=batch_size,
+                           device=device,
+                           logdir=logdir,
+                           val_every=val_every,
+                           num_gpus=num_gpus,
+                           master_port=17751,
+                           training_script=__file__)
 
     trainer.train(train_dataset=train_ds, val_dataset=val_ds)
+
+if __name__ == "__main__":
+    main()
