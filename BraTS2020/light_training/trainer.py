@@ -32,7 +32,7 @@ class Trainer:
                  master_port=17750,
                  training_script="train.py",
                  ):
-        assert env_type.lower() in ["pytorch", "ddp"], f"not support this env_type: {env_type}"
+        assert env_type.lower() in ["pytorch", "ddp"], f"Unsupported env_type: {env_type}"
         self.env_type = env_type.lower()
         self.val_every = val_every
         self.max_epochs = max_epochs
@@ -295,3 +295,103 @@ class Trainer:
         self.model.load_state_dict(new_sd, strict=strict)
         
         print(f"Model parameters loaded successfully.")
+
+
+class BraTSTrainer(Trainer):
+    def __init__(self, args):
+        super().__init__(
+            env_type=args.env_type,
+            max_epochs=args.max_epochs,
+            batch_size=args.batch_size,
+            val_every=args.val_every,
+            num_gpus=args.num_gpus,
+            logdir=args.logdir,
+            master_ip=args.master_ip,
+            master_port=args.master_port,
+            training_script=args.training_script
+        )
+        self.window_infer = SlidingWindowInferer(
+            roi_size=[96, 96, 96],
+            sw_batch_size=1,
+            overlap=0.25
+        )
+        self.model = DiffUNet(number_modality=4, number_targets=3)
+
+        self.best_mean_dice = 0.0
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-4, weight_decay=1e-3)
+        self.ce = nn.CrossEntropyLoss() 
+        self.mse = nn.MSELoss()
+        self.scheduler = LinearWarmupCosineAnnealingLR(
+            self.optimizer,
+            warmup_epochs=30,
+            max_epochs=args.max_epochs
+        )
+
+        self.bce = nn.BCEWithLogitsLoss()
+        self.dice_loss = DiceLoss(sigmoid=True)
+
+    def training_step(self, batch):
+        image, label = self.get_input(batch)
+        x_start = label * 2 - 1
+        x_t, t, noise = self.model(x=x_start, pred_type="q_sample")
+        pred_xstart = self.model(x=x_t, step=t, image=image, pred_type="denoise")
+
+        loss_dice = self.dice_loss(pred_xstart, label)
+        loss_bce = self.bce(pred_xstart, label)
+        pred_xstart = torch.sigmoid(pred_xstart)
+        loss_mse = self.mse(pred_xstart, label)
+
+        loss = loss_dice + loss_bce + loss_mse
+
+        if self.env_type == "ddp":
+            dist.all_reduce(loss, op=dist.ReduceOp.SUM)
+            loss = loss / dist.get_world_size()
+
+        self.log("train_loss", loss.item(), step=self.global_step)
+
+        return loss
+
+    def get_input(self, batch):
+        image = batch["image"]
+        label = batch["label"]
+        label = label.float()
+        return image, label 
+
+    def validation_step(self, batch):
+        image, label = self.get_input(batch)    
+        model = self.model.module if self.env_type == "ddp" else self.model
+        output = self.window_infer(image, model, pred_type="ddim_sample")
+        output = torch.sigmoid(output)
+        output = (output > 0.5).float().cpu().numpy()
+
+        target = label.cpu().numpy()
+        wt = dice(output[:, 1], target[:, 1])  # CE
+        tc = dice(output[:, 0], target[:, 0])  # Core
+        et = dice(output[:, 2], target[:, 2])  # Active
+
+        return [wt, tc, et]
+
+    def validation_end(self, mean_val_outputs):
+        wt, tc, et = mean_val_outputs
+        self.log("wt", wt, step=self.epoch)
+        self.log("tc", tc, step=self.epoch)
+        self.log("et", et, step=self.epoch)
+
+        mean_dice = (wt + tc + et) / 3
+        self.log("mean_dice", mean_dice, step=self.epoch)
+
+        if mean_dice > self.best_mean_dice:
+            self.best_mean_dice = mean_dice
+            save_new_model_and_delete_last(
+                self.model.module if self.env_type == "ddp" else self.model, 
+                os.path.join(self.logdir, "model", f"best_model_{mean_dice:.4f}.pt"), 
+                delete_symbol="best_model"
+            )
+
+        save_new_model_and_delete_last(
+            self.model.module if self.env_type == "ddp" else self.model, 
+            os.path.join(self.logdir, "model", f"final_model_{mean_dice:.4f}.pt"), 
+            delete_symbol="final_model"
+        )
+
+        print(f"wt: {wt}, tc: {tc}, et: {et}, mean_dice: {mean_dice}")
