@@ -168,7 +168,7 @@ def main():
     val_every = 10
     num_gpus = 2
     device = "cuda"
-    env = "ddp"
+    env = "DDP"
     # local_rank = 0
     # not_call_launch = False
 
