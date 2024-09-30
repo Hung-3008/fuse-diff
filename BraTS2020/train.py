@@ -28,8 +28,7 @@ class DiffUNet(nn.Module):
         super().__init__()
         self.embed_model = BasicUNetEncoder(3, number_modality, number_targets, [64, 64, 128, 256, 512, 64])
 
-        self.model = BasicUNetDe(3, number_targets, number_targets, [64, 64, 128, 256, 512, 64], 
-                                act = ("LeakyReLU", {"negative_slope": 0.1, "inplace": False}))
+        self.model = BasicUNetDe(3, number_targets, number_targets, [64, 64, 128, 256, 512, 64], act = ("LeakyReLU", {"negative_slope": 0.1, "inplace":}))
    
         betas = get_named_beta_schedule("linear", 1000)
         self.diffusion = SpacedDiffusion(use_timesteps=space_timesteps(1000, [1000]),
@@ -66,8 +65,8 @@ class DiffUNet(nn.Module):
             return sample_out
 
 class BraTSTrainer(Trainer):
-    def __init__(self, env_type, max_epochs, batch_size, device="cpu", val_every=1, num_gpus=1, logdir="./logs/", master_ip='localhost', master_port=17750, training_script="train.py"):
-        super().__init__(env_type, max_epochs, batch_size, device, val_every, num_gpus, logdir, master_ip, master_port, training_script)
+    def __init__(self, env_type, max_epochs, batch_size, device="cpu", val_every=1, num_gpus=1, logdir="./logs/", master_ip='localhost', master_port=17750, training_script="train.py", local_rank=0):
+        super().__init__(env_type, max_epochs, batch_size, device, val_every, num_gpus, logdir, master_ip, master_port, training_script, local_rank)
         self.window_infer = SlidingWindowInferer(roi_size=[96, 96, 96],
                                         sw_batch_size=1,
                                         overlap=0.25)
@@ -162,7 +161,6 @@ class BraTSTrainer(Trainer):
 if __name__ == "__main__":
     import argparse
 
-if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a DiffUNet model for BraTS dataset")
     parser.add_argument("--data_dir", type=str, default="./datasets/brats2020/MICCAI_BraTS2020_TrainingData/", help="Path to the dataset directory")
     parser.add_argument("--logdir", type=str, default="./logs_brats/diffusion_seg_all_loss_embed/", help="Directory to save logs and models")
@@ -174,7 +172,7 @@ if __name__ == "__main__":
     parser.add_argument("--env", type=str, default="pytorch", help="Environment type")
     parser.add_argument("--local_rank", type=int, default=0, help="Local rank for distributed training")
 
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
 
     model_save_path = os.path.join(args.logdir, "model")
 
@@ -188,23 +186,7 @@ if __name__ == "__main__":
                             val_every=args.val_every,
                             num_gpus=args.num_gpus,
                             master_port=17751,
-                            training_script=__file__)
-
-    trainer.train(train_dataset=train_ds, val_dataset=val_ds)
-    args = parser.parse_args()
-
-    model_save_path = os.path.join(args.logdir, "model")
-
-    train_ds, val_ds, test_ds = get_loader_brats(data_dir=args.data_dir, batch_size=args.batch_size, fold=0)
-    
-    trainer = BraTSTrainer(env_type=args.env,
-                            max_epochs=args.max_epoch,
-                            batch_size=args.batch_size,
-                            device=args.device,
-                            logdir=args.logdir,
-                            val_every=args.val_every,
-                            num_gpus=args.num_gpus,
-                            master_port=17751,
-                            training_script=__file__)
+                            training_script=__file__,
+                            local_rank=args.local_rank)
 
     trainer.train(train_dataset=train_ds, val_dataset=val_ds)
