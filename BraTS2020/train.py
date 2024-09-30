@@ -169,6 +169,8 @@ if __name__ == "__main__":
     parser.add_argument("--num_gpus", type=int, default=1, help="Number of GPUs to use")
     parser.add_argument("--device", type=str, default="cuda:0", help="Device to use for training")
     parser.add_argument("--env", type=str, default="pytorch", help="Environment type")
+    parser.add_argument("--local_rank", type=int, default=0, help="Local rank for distributed training")
+    parser.add_argument("--not_call_launch", action='store_true', help="Flag to indicate not to call launch")
 
     args = parser.parse_args()
 
