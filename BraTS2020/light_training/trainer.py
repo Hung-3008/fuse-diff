@@ -103,7 +103,8 @@ class Trainer:
         parser.add_argument('--not_call_launch',
                             action='store_true',
                             help="not call launch!")
-        ds_args = parser.parse_args()
+        #ds_args = parser.parse_args()
+        ds_args, unknown = parser.parse_known_args()
         self.rank = int(os.environ.get('RANK', 0))
         self.local_rank = ds_args.local_rank
         self.not_call_launch = ds_args.not_call_launch
