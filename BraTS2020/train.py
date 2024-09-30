@@ -199,6 +199,12 @@ class Trainer:
             mean_val = torch.where(length > 0, v_sum / length, torch.zeros_like(v_sum))
             return mean_val.cpu().tolist()
 
+    def distributed_concat(self, tensor, num_total_examples):
+        output_tensors = [torch.zeros_like(tensor) for _ in range(dist.get_world_size())]
+        dist.all_gather(output_tensors, tensor)
+        concat = torch.cat(output_tensors, dim=0)[:num_total_examples]
+        return concat
+
     def train(self,
               train_dataset,
               optimizer=None,
@@ -286,12 +292,6 @@ class Trainer:
         
         if self.env_type == "ddp":
             dist.destroy_process_group()
-
-    def distributed_concat(self, tensor, num_total_examples):
-        output_tensors = [torch.zeros_like(tensor) for _ in range(dist.get_world_size())]
-        dist.all_gather(output_tensors, tensor)
-        concat = torch.cat(output_tensors, dim=0)[:num_total_examples]
-        return concat
 
     def train_epoch(self, loader, epoch):
         if self.model is not None:
@@ -476,6 +476,7 @@ def parse_args():
     parser.add_argument('--master_ip', type=str, default='localhost', help='Master node IP')
     parser.add_argument('--master_port', type=int, default=17751, help='Master node port')
     parser.add_argument('--training_script', type=str, default='train.py', help='Training script name')
+    parser.add_argument('--device', type=str, default='cuda', help='Device to use for training')
     
     args, _ = parser.parse_known_args()
     return args
