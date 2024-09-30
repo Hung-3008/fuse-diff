@@ -161,8 +161,8 @@ class BraTSTrainer(Trainer):
 
 def main():
     # Fixed values
-    data_dir = "/logs"
-    logdir = "/kaggle/input/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData"
+    data_dir = "/kaggle/input/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData"
+    logdir = "/logs"
     max_epoch = 300
     batch_size = 1
     val_every = 10
