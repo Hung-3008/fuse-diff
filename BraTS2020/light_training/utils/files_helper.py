@@ -20,3 +20,10 @@ def save_new_model_and_delete_last(model, save_path, delete_symbol=None):
     torch.save(model.state_dict(), save_path)
 
     print(f"model is saved in {save_path}")
+
+def load_model(model, load_path):
+    if os.path.exists(load_path):
+        model.load_state_dict(torch.load(load_path))
+        print(f"Model loaded from {load_path}")
+    else:
+        print(f"No model found at {load_path}")
