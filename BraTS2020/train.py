@@ -15,7 +15,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 # Import the updated Trainer class
-from trainer import Trainer
+from light_training.trainer import Trainer
 
 set_determinism(1234)
 
@@ -210,9 +210,11 @@ if __name__ == "__main__":
     parser.add_argument("--num_gpus", type=int, default=2, help="Number of GPUs to use")
     parser.add_argument("--device", type=str, default="cuda", help="Device to use for training")
     parser.add_argument("--env", type=str, default="ddp", choices=["pytorch", "ddp"], help="Environment type")
-    parser.add_argument("--local_rank", type=int, default=0, help="Local rank for distributed training")
-
+    
     args = parser.parse_args()
+
+    # Get local rank from environment variable
+    args.local_rank = int(os.environ.get("LOCAL_RANK", 0))
 
     # Set up distributed training if using DDP
     if args.env == "ddp":
@@ -231,3 +233,4 @@ if __name__ == "__main__":
     # Clean up distributed training resources
     if args.env == "ddp":
         dist.destroy_process_group()
+

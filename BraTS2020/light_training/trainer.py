@@ -56,6 +56,7 @@ class Trainer:
         else:
             self.writer = None
 
+
     def get_dataloader(self, dataset, shuffle=False, batch_size=1, train=True):
         if dataset is None:
             return None
