@@ -66,7 +66,7 @@ class DiffUNet(nn.Module):
             return sample_out
 
 class BraTSTrainer(Trainer):
-    def __init__(self, env_type, max_epochs, batch_size, device="cpu", val_every=1, num_gpus=1, logdir="./logs/", master_ip='localhost', master_port=17750, training_script="train.py"):
+    def __init__(self, env_type, max_epochs, batch_size, device="cpu", val_every=1, num_gpus=1, logdir="./logs/", master_ip='localhost', master_port=17750, training_script="train.py", checkpoint_path=None):
         super().__init__(env_type, max_epochs, batch_size, device, val_every, num_gpus, logdir, master_ip, master_port, training_script)
         self.window_infer = SlidingWindowInferer(roi_size=[96, 96, 96],
                                         sw_batch_size=1,
@@ -83,6 +83,16 @@ class BraTSTrainer(Trainer):
 
         self.bce = nn.BCEWithLogitsLoss()
         self.dice_loss = DiceLoss(sigmoid=True)
+
+        if checkpoint_path:
+            self.load_model(checkpoint_path)
+
+    def load_model(self, checkpoint_path):
+        if os.path.exists(checkpoint_path):
+            self.model.load_state_dict(torch.load(checkpoint_path))
+            print(f"Model loaded from {checkpoint_path}")
+        else:
+            print(f"No model found at {checkpoint_path}")
 
     def training_step(self, batch):
         image, label = self.get_input(batch)
@@ -169,6 +179,8 @@ if __name__ == "__main__":
     parser.add_argument("--num_gpus", type=int, default=1, help="Number of GPUs to use")
     parser.add_argument("--device", type=str, default="cuda:0", help="Device to use for training")
     parser.add_argument("--env", type=str, default="pytorch", help="Environment type")
+    parser.add_argument("--checkpoint_path", type=str, default=None, help="Path to the checkpoint to resume training")
+    parser.add_argument("--resume", action="store_true", help="Flag to resume training from the checkpoint")
 
     args = parser.parse_args()
 
@@ -184,6 +196,7 @@ if __name__ == "__main__":
                             val_every=args.val_every,
                             num_gpus=args.num_gpus,
                             master_port=17751,
-                            training_script=__file__)
+                            training_script=__file__,
+                            checkpoint_path=args.checkpoint_path if args.resume else None)
 
     trainer.train(train_dataset=train_ds, val_dataset=val_ds)
