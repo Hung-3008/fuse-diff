@@ -157,17 +157,22 @@ class BraTSTrainer(Trainer):
         return loss
 
     def validation_step(self, batch):
+        print("Starting validation step")
         image, label = self.get_input(batch)
+        print("Got input batch")
 
         # Ensure model is in evaluation mode
         self.model.eval()
+        print("Model set to eval mode")
 
         with torch.no_grad():
+            print("Starting sliding window inference")
             output = self.window_infer(
                 inputs=image,
                 network=self.model.module if self.ddp else self.model,
                 pred_type="ddim_sample",
             )
+            print("Sliding window inference completed")
 
             output = torch.sigmoid(output)
             output = (output > 0.5).float().cpu().numpy()
@@ -177,6 +182,7 @@ class BraTSTrainer(Trainer):
             tc = dice(output[:, 0], target[:, 0])  # Tumor core
             et = dice(output[:, 2], target[:, 2])  # Enhancing tumor
 
+            print(f"Validation step completed: wt={wt}, tc={tc}, et={et}")
             return [wt, tc, et]
 
     def validation_end(self, mean_val_outputs):
@@ -232,6 +238,7 @@ if __name__ == "__main__":
 
     # Prepare data loaders
     train_ds, val_ds, test_ds = get_loader_brats(data_dir=args.data_dir, batch_size=args.batch_size, fold=0)
+    print(f"Train dataset size: {len(train_ds)}, Validation dataset size: {len(val_ds)}")
 
     # Start training
     trainer.train(train_dataset=train_ds, val_dataset=val_ds)
