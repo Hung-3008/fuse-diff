@@ -36,12 +36,6 @@ class DiffUNet(nn.Module):
         self.model = BasicUNetDe(3, number_targets, number_targets, [64, 64, 128, 256, 512, 64],
                                  act=("LeakyReLU", {"negative_slope": 0.1, "inplace": False}))
 
-        from guided_diffusion.gaussian_diffusion import (
-            get_named_beta_schedule, ModelMeanType, ModelVarType, LossType
-        )
-        from guided_diffusion.respace import SpacedDiffusion, space_timesteps
-        from guided_diffusion.resample import UniformSampler
-
         betas = get_named_beta_schedule("linear", 1000)
         self.diffusion = SpacedDiffusion(
             use_timesteps=space_timesteps(1000, [1000]),
@@ -70,16 +64,15 @@ class DiffUNet(nn.Module):
             embeddings = self.embed_model(image)
             return self.model(x, t=step, image=image, embeddings=embeddings)
 
-        elif pred_type == "ddim_sample":
+    def ddim_inference(self, image):
+        with torch.no_grad():
             embeddings = self.embed_model(image)
-
             sample_out = self.sample_diffusion.ddim_sample_loop(
                 self.model,
                 (1, number_targets, 96, 96, 96),
                 model_kwargs={"image": image, "embeddings": embeddings},
             )
-            sample_out = sample_out["pred_xstart"]
-            return sample_out
+            return sample_out["pred_xstart"]
 
 class BraTSTrainer(Trainer):
     def __init__(self, args):
@@ -169,8 +162,7 @@ class BraTSTrainer(Trainer):
             print("Starting sliding window inference")
             output = self.window_infer(
                 inputs=image,
-                network=self.model.module if self.ddp else self.model,
-                pred_type="ddim_sample",
+                network=lambda img: self.model.ddim_inference(img),
             )
             print("Sliding window inference completed")
 
@@ -181,6 +173,21 @@ class BraTSTrainer(Trainer):
             wt = dice(output[:, 1], target[:, 1])  # Whole tumor
             tc = dice(output[:, 0], target[:, 0])  # Tumor core
             et = dice(output[:, 2], target[:, 2])  # Enhancing tumor
+
+            # Aggregate metrics across GPUs
+            wt_tensor = torch.tensor(wt, device=self.device)
+            tc_tensor = torch.tensor(tc, device=self.device)
+            et_tensor = torch.tensor(et, device=self.device)
+
+            if self.ddp:
+                dist.all_reduce(wt_tensor, op=dist.ReduceOp.SUM)
+                dist.all_reduce(tc_tensor, op=dist.ReduceOp.SUM)
+                dist.all_reduce(et_tensor, op=dist.ReduceOp.SUM)
+
+                world_size = dist.get_world_size()
+                wt = wt_tensor.item() / world_size
+                tc = tc_tensor.item() / world_size
+                et = et_tensor.item() / world_size
 
             print(f"Validation step completed: wt={wt}, tc={tc}, et={et}")
             return [wt, tc, et]
@@ -246,4 +253,3 @@ if __name__ == "__main__":
     # Clean up distributed training resources
     if args.env == "ddp":
         dist.destroy_process_group()
-
