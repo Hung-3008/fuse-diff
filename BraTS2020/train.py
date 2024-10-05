@@ -160,10 +160,16 @@ class BraTSTrainer(Trainer):
 
         with torch.no_grad():
             print("Starting sliding window inference")
-            output = self.window_infer(
-                inputs=image,
-                network=lambda img: self.model.ddim_inference(img),
-            )
+            if self.ddp:
+                output = self.window_infer(
+                    inputs=image,
+                    network=lambda img: self.model.module.ddim_inference(img),
+                )
+            else:
+                output = self.window_infer(
+                    inputs=image,
+                    network=lambda img: self.model.ddim_inference(img),
+                )
             print("Sliding window inference completed")
 
             output = torch.sigmoid(output)
