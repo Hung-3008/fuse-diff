@@ -19,6 +19,7 @@ import yaml
 from guided_diffusion.gaussian_diffusion import get_named_beta_schedule, ModelMeanType, ModelVarType, LossType
 from guided_diffusion.respace import SpacedDiffusion, space_timesteps
 from guided_diffusion.resample import UniformSampler
+from tqdm import tqdm
 
 # Import the updated Trainer class
 from light_training.trainer import Trainer
@@ -224,6 +225,15 @@ class BraTSTrainer(Trainer):
             )
 
             print(f"wt: {wt}, tc: {tc}, et: {et}, mean_dice: {mean_dice}")
+
+    def validate(self, val_dataset):
+        val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
+        val_outputs = []
+        for batch in tqdm(val_loader, desc="Validating", leave=False):
+            val_outputs.append(self.validation_step(batch))
+
+        mean_val_outputs = np.mean(val_outputs, axis=0)
+        self.validation_end(mean_val_outputs)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a DiffUNet model for BraTS dataset")
