@@ -151,13 +151,13 @@ class BraTSTrainer(Trainer):
         return loss
 
     def validation_step(self, batch):
-        print("Starting validation step")
+        #print("Starting validation step")
         image, label = self.get_input(batch)
-        print("Got input batch")
+        #print("Got input batch")
 
         # Ensure model is in evaluation mode
         self.model.eval()
-        print("Model set to eval mode")
+        #print("Model set to eval mode")
 
         with torch.no_grad():
             print("Starting sliding window inference")
@@ -171,7 +171,7 @@ class BraTSTrainer(Trainer):
                     inputs=image,
                     network=lambda img: self.model.ddim_inference(img),
                 )
-            print("Sliding window inference completed")
+            #print("Sliding window inference completed")
 
             output = torch.sigmoid(output)
             output = (output > 0.5).float().cpu().numpy()
@@ -196,7 +196,7 @@ class BraTSTrainer(Trainer):
                 tc = tc_tensor.item() / world_size
                 et = et_tensor.item() / world_size
 
-            print(f"Validation step completed: wt={wt}, tc={tc}, et={et}")
+            #print(f"Validation step completed: wt={wt}, tc={tc}, et={et}")
             return [wt, tc, et]
 
     def validation_end(self, mean_val_outputs):
