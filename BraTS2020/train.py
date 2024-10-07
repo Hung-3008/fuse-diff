@@ -110,7 +110,7 @@ class BraTSTrainer(Trainer):
                 self.model,
                 device_ids=[self.local_rank],
                 output_device=self.local_rank,
-                find_unused_parameters=False,  # Set to False to reduce overhead if there are no unused parameters
+                find_unused_parameters=True,  # Set to True to find unused parameters
             )
 
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-4, weight_decay=1e-3)
