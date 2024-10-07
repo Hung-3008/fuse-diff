@@ -20,7 +20,6 @@ from guided_diffusion.gaussian_diffusion import get_named_beta_schedule, ModelMe
 from guided_diffusion.respace import SpacedDiffusion, space_timesteps
 from guided_diffusion.resample import UniformSampler
 from tqdm import tqdm
-from tqdm import tqdm
 
 # Import the updated Trainer class
 from light_training.trainer import Trainer
@@ -66,15 +65,16 @@ class DiffUNet(nn.Module):
             embeddings = self.embed_model(image)
             return self.model(x, t=step, image=image, embeddings=embeddings)
 
-    def ddim_inference(self, image):
-        with torch.no_grad():
+        elif pred_type == "ddim_sample":
             embeddings = self.embed_model(image)
+
             sample_out = self.sample_diffusion.ddim_sample_loop(
                 self.model,
                 (1, number_targets, 96, 96, 96),
                 model_kwargs={"image": image, "embeddings": embeddings},
             )
-            return sample_out["pred_xstart"]
+            sample_out = sample_out["pred_xstart"]
+            return sample_out
 
 class BraTSTrainer(Trainer):
     def __init__(self, args):
@@ -152,27 +152,21 @@ class BraTSTrainer(Trainer):
         return loss
 
     def validation_step(self, batch):
-        #print("Starting validation step")
+        print("Starting validation step")
         image, label = self.get_input(batch)
-        #print("Got input batch")
+        print("Got input batch")
 
         # Ensure model is in evaluation mode
         self.model.eval()
-        #print("Model set to eval mode")
+        print("Model set to eval mode")
 
         with torch.no_grad():
             print("Starting sliding window inference")
-            if self.ddp:
-                output = self.window_infer(
-                    inputs=image,
-                    network=lambda img: self.model.module.ddim_inference(img),
-                )
-            else:
-                output = self.window_infer(
-                    inputs=image,
-                    network=lambda img: self.model.ddim_inference(img),
-                )
-            #print("Sliding window inference completed")
+            output = self.window_infer(
+                inputs=image,
+                network=lambda img: self.model.module.ddim_inference(img) if self.ddp else self.model.ddim_inference(img),
+            )
+            print("Sliding window inference completed")
 
             output = torch.sigmoid(output)
             output = (output > 0.5).float().cpu().numpy()
@@ -197,7 +191,7 @@ class BraTSTrainer(Trainer):
                 tc = tc_tensor.item() / world_size
                 et = et_tensor.item() / world_size
 
-            #print(f"Validation step completed: wt={wt}, tc={tc}, et={et}")
+            print(f"Validation step completed: wt={wt}, tc={tc}, et={et}")
             return [wt, tc, et]
 
     def validate(self, val_dataset):
@@ -235,15 +229,6 @@ class BraTSTrainer(Trainer):
             )
 
             print(f"wt: {wt}, tc: {tc}, et: {et}, mean_dice: {mean_dice}")
-
-    def validate(self, val_dataset):
-        val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
-        val_outputs = []
-        for batch in tqdm(val_loader, desc="Validating", leave=False):
-            val_outputs.append(self.validation_step(batch))
-
-        mean_val_outputs = np.mean(val_outputs, axis=0)
-        self.validation_end(mean_val_outputs)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a DiffUNet model for BraTS dataset")
