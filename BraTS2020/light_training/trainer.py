@@ -26,7 +26,21 @@ from .launch import launch_dist
 from monai.utils import set_determinism
 from .sampler import SequentialDistributedSampler, distributed_concat
 from torch.utils.tensorboard import SummaryWriter
+import torch.distributed as dist
 
+def setup_distributed_training():
+    # Initialize the process group
+    dist.init_process_group(backend='nccl')
+    
+    # Get the rank of the current process
+    rank = dist.get_rank()
+    
+    # Set the device for the current process
+    torch.cuda.set_device(rank)
+    
+    # Set the CUDA_VISIBLE_DEVICES environment variable
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(rank)
+    
 class Trainer:
     def __init__(self, env_type,
                  max_epochs,
