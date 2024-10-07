@@ -10,23 +10,14 @@
 # limitations under the License.
 
 import os
-from tqdm import tqdm
-import time
-import numpy as np
 import torch
-import torch.nn.parallel
 import torch.utils.data.distributed
-
-from monai.data import DataLoader
-
-
-import argparse
-from .launch import launch_dist
-
-from monai.utils import set_determinism
-from .sampler import SequentialDistributedSampler, distributed_concat
-from torch.utils.tensorboard import SummaryWriter
 import torch.distributed as dist
+from monai.data import DataLoader
+from monai.utils import set_determinism
+from torch.utils.tensorboard import SummaryWriter
+from .sampler import SequentialDistributedSampler, distributed_concat
+from .launch import launch_dist
 
 def setup_distributed_training():
     # Initialize the process group
@@ -40,7 +31,7 @@ def setup_distributed_training():
     
     # Set the CUDA_VISIBLE_DEVICES environment variable
     os.environ['CUDA_VISIBLE_DEVICES'] = str(rank)
-    
+
 class Trainer:
     def __init__(self, env_type,
                  max_epochs,
