@@ -20,6 +20,7 @@ from guided_diffusion.gaussian_diffusion import get_named_beta_schedule, ModelMe
 from guided_diffusion.respace import SpacedDiffusion, space_timesteps
 from guided_diffusion.resample import UniformSampler
 from tqdm import tqdm
+from tqdm import tqdm
 
 # Import the updated Trainer class
 from light_training.trainer import Trainer
@@ -109,7 +110,7 @@ class BraTSTrainer(Trainer):
                 self.model,
                 device_ids=[self.local_rank],
                 output_device=self.local_rank,
-                find_unused_parameters=True,
+                find_unused_parameters=False,  # Set to False to reduce overhead if there are no unused parameters
             )
 
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-4, weight_decay=1e-3)
@@ -199,6 +200,15 @@ class BraTSTrainer(Trainer):
             #print(f"Validation step completed: wt={wt}, tc={tc}, et={et}")
             return [wt, tc, et]
 
+    def validate(self, val_dataset):
+        val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
+        val_outputs = []
+        for batch in tqdm(val_loader, desc="Validating", leave=False):
+            val_outputs.append(self.validation_step(batch))
+
+        mean_val_outputs = np.mean(val_outputs, axis=0).tolist()
+        self.validation_end(mean_val_outputs)
+
     def validation_end(self, mean_val_outputs):
         wt, tc, et = mean_val_outputs
 
@@ -243,6 +253,8 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size per GPU")
     parser.add_argument("--val_every", type=int, default=10, help="Validation frequency (in epochs)")
     parser.add_argument("--num_gpus", type=int, default=2, help="Number of GPUs to use")
+    parser.add_argument("--train_size", type=int, default=None, help="Number of training samples for debugging")
+    parser.add_argument("--val_size", type=int, default=None, help="Number of validation samples for debugging")
     parser.add_argument("--device", type=str, default="cuda", help="Device to use for training")
     parser.add_argument("--env", type=str, default="ddp", choices=["pytorch", "ddp"], help="Environment type")
     
@@ -261,6 +273,12 @@ if __name__ == "__main__":
 
     # Prepare data loaders
     train_ds, val_ds, test_ds = get_loader_brats(data_dir=args.data_dir, batch_size=args.batch_size, fold=0)
+
+    # Reduce training and validation dataset sizes for debugging if specified
+    if args.train_size is not None:
+        train_ds = torch.utils.data.Subset(train_ds, range(args.train_size))
+    if args.val_size is not None:
+        val_ds = torch.utils.data.Subset(val_ds, range(args.val_size))
     print(f"Train dataset size: {len(train_ds)}, Validation dataset size: {len(val_ds)}")
 
     # Start training
